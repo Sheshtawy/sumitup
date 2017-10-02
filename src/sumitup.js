@@ -228,7 +228,7 @@ class Organization {
   }
 
   _getResources(type, state) {
-    return githubClient.search.issues(
+    return this._client.search.issues(
       { q: `org:${this.name}+created:>${this._morningTimeIso}+type:${type}+is:${state}` }
     )
     .then(result => {
@@ -239,6 +239,13 @@ class Organization {
 }
 
 module.exports = (context, cb) => {
+  if((!_.isNil(context.body) || !_.isNil(context.body.token)) &&
+    (context.secrets.slack_token !== context.body.token)) {
+    const err = new Error('Invalid slack token, are you sure this your webtask?' +
+      ' Maybe you forgot to add the slack token to your secrets!'
+    );
+  }
+
   const githubConfig = {
     timeout: 5000,
     host: context.secrets.api_endpoint,
@@ -255,12 +262,21 @@ module.exports = (context, cb) => {
     token: context.secrets.api_token,
   });
   
-  if(_.isNil(context.body.orgName) && _.isNil(context.data.orgName)) {
+  let orgName, template;
+
+  if(_.isNil(context.body) && _.isNil(context.body.text) {
+    orgName = context.body.text;
+    template = 'slack';
+  } else if(_.isNil(context.data) && _.isNil(context.data.orgName)) {
+    orgName = context.data.orgName;
+    template = 'json';
+  } else {
     const err = new Error('Invalid or missing organization name');
     cb(err);
   }
 
-  const orgName = !_.isNil(context.body.orgName) ? context.body.orgName : context.data.orgName;
+  
+  
   const org = new Organization('facebook', githubClient);
   
   return org.sumItUp()
