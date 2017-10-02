@@ -2,115 +2,28 @@
 const _ = require('lodash');
 const GithubClient = require('github');
 
-// {
-//     "text": "Here's what your team at Crowdanalyzer have been up to today!",
-//     "attachments": [
-//         {
-//             "title": "Repositories: 123",
-//             "fields": [
-// 				{
-// 					"title": "Created",
-// 					"value": "12",
-// 					"short": true
-// 				},
-// 				{
-// 					"title": "Deleted",
-// 					"value": "12",
-// 					"short": true
-// 				},
-// 				{
-// 					"title": "Updated",
-// 					"value": "12",
-// 					"short": true
-// 				}
-				
-// 			]
-//         },
-//         {
-//             "title": "Pull Requests: 143",
-//             "fields": [
-//                 {
-//                     "title": "new",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "closed",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "deleted",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         },
-//         {
-//             "title": "Review Comments: 260",
-//             "fields": [
-//                 {
-//                     "title": "specifications#1",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "data-platforms#23",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         },
-//         {
-//             "title": "Commits: 312",
-//             "fields": [
-//                 {
-//                     "title": "specifications#1",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "data-platforms#23",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         },
-//         {
-//             "title": "Issues: 312",
-//             "fields": [
-//                 {
-//                     "title": "specifications#1",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "data-platforms#23",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         }
-//     ]
-// }
-const slackMessageTemplate = (data) => {
-  return {
-    title: data.title,
-    attachments: _.map(data.entries, entry => {
-      return {
-        title: `${entry.title}: ${entry.totalCount}`,
-        fields: _.map(entry.fields, field => {
-          return {
-            title: field.title,
-            value: field.value,
-            short: true,
-          };
-        }),
-      };
-    })
-
-  }
+const templates = {
+  slack: data => {
+    return {
+      text: `Here's what your team at ${data.org_name} have been up to today!`,
+      attachments: _.map(data, element => {
+        return {
+          title: element.title,
+          fields: _.map(element.entries, (value, key) => {
+            return {
+              title: key,
+              value,
+              short: true,
+            };
+          }),
+        };
+      })
+    };
+  },
+  json: data => data
 };
+
+
 
 class Organization {
   /**
@@ -168,7 +81,7 @@ class Organization {
   }
 
 
-  sumItUp() {
+  sumItUp(templateName = 'json') {
     const promises = [
       this._sumUpRepositories(),
       this._sumUpPullRequests(),
@@ -176,7 +89,10 @@ class Organization {
     ];
 
     return Promise.all(promises)
-      .then(result => _.merge(...result));
+      .then(result => {
+        result.org_name = _.capitalize(this.name);
+        return templates[templateName](result);
+      });
     
   }
 
@@ -189,7 +105,10 @@ class Organization {
     return Promise.all(promises)
       .then(result => {
           this.repositories = _.merge(...result);
-          return { repositories: this.repositories };
+          return { 
+            title: 'Repositories', 
+            entries: this.repositories
+           };
       });
   }
 
@@ -202,7 +121,10 @@ class Organization {
     return Promise.all(promises)
       .then(result => {
           this.pullRequests = _.merge(...result);
-          return { pull_requests: this.pullRequests };
+          return { 
+            title: 'Pull Requests', 
+            entries: this.pullRequests 
+          };
       });
   }
 
@@ -214,7 +136,10 @@ class Organization {
     return Promise.all(promises)
       .then(result => {
           this.issues = _.merge(...result);
-          return { issues: this.issues };
+          return { 
+            title: 'Issues', 
+            entries: this.issues 
+          };
       });
   }
 
@@ -239,7 +164,8 @@ class Organization {
 }
 
 module.exports = (context, cb) => {
-  if((!_.isNil(context.body) || !_.isNil(context.body.token)) &&
+  // validate slack token in case of an incoming slash command
+  if((!_.isNil(context.body) && !_.isNil(context.body.token)) &&
     (context.secrets.slack_token !== context.body.token)) {
     const err = new Error('Invalid slack token, are you sure this your webtask?' +
       ' Maybe you forgot to add the slack token to your secrets!'
@@ -262,24 +188,22 @@ module.exports = (context, cb) => {
     token: context.secrets.api_token,
   });
   
-  let orgName, template;
-
-  if(_.isNil(context.body) && _.isNil(context.body.text) {
+  // Extract organization name and decide rendering template
+  let orgName, templateName;
+  if(!_.isNil(context.body) && !_.isNil(context.body.text)) {
     orgName = context.body.text;
-    template = 'slack';
-  } else if(_.isNil(context.data) && _.isNil(context.data.orgName)) {
+    templateName = 'slack';
+  } else if(!_.isNil(context.data) && !_.isNil(context.data.orgName)) {
     orgName = context.data.orgName;
-    template = 'json';
+    templateName = 'json';
   } else {
     const err = new Error('Invalid or missing organization name');
     cb(err);
   }
-
   
+  const org = new Organization(orgName, githubClient);
   
-  const org = new Organization('facebook', githubClient);
-  
-  return org.sumItUp()
+  return org.sumItUp(templateName)
     .then(result => {
       cb(null, result);
     })  
