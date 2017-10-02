@@ -1,6 +1,10 @@
 # sumitup
 A webtask to summarize your team git activity.
 
+**Sumitup** helps team leaders (and members) to keep track of their organization progress during the day. It collects updates about repositories, issues and pull requests and compile a little summary about the progress of the team.
+
+![sumitup demo](https://imgur.com/a/DsBhX)
+
 ## Setup
 1. Clone the repo and run `npm install` to download the dependencies.
 
