@@ -11,114 +11,27 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 var _ = require('lodash');
 var GithubClient = require('github');
 
-// {
-//     "text": "Here's what your team at Crowdanalyzer have been up to today!",
-//     "attachments": [
-//         {
-//             "title": "Repositories: 123",
-//             "fields": [
-// 				{
-// 					"title": "Created",
-// 					"value": "12",
-// 					"short": true
-// 				},
-// 				{
-// 					"title": "Deleted",
-// 					"value": "12",
-// 					"short": true
-// 				},
-// 				{
-// 					"title": "Updated",
-// 					"value": "12",
-// 					"short": true
-// 				}
-
-// 			]
-//         },
-//         {
-//             "title": "Pull Requests: 143",
-//             "fields": [
-//                 {
-//                     "title": "new",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "closed",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "deleted",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         },
-//         {
-//             "title": "Review Comments: 260",
-//             "fields": [
-//                 {
-//                     "title": "specifications#1",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "data-platforms#23",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         },
-//         {
-//             "title": "Commits: 312",
-//             "fields": [
-//                 {
-//                     "title": "specifications#1",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "data-platforms#23",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         },
-//         {
-//             "title": "Issues: 312",
-//             "fields": [
-//                 {
-//                     "title": "specifications#1",
-//                     "value": "50",
-//                     "short": true
-//                 },
-//                 {
-//                     "title": "data-platforms#23",
-//                     "value": "50",
-//                     "short": true
-//                 }
-//             ]
-//         }
-//     ]
-// }
-var slackMessageTemplate = function slackMessageTemplate(data) {
-  return {
-    title: data.title,
-    attachments: _.map(data.entries, function (entry) {
-      return {
-        title: entry.title + ': ' + entry.totalCount,
-        fields: _.map(entry.fields, function (field) {
-          return {
-            title: field.title,
-            value: field.value,
-            short: true
-          };
-        })
-      };
-    })
-
-  };
+var templates = {
+  slack: function slack(data) {
+    return {
+      text: 'Here\'s what your team at ' + data.org_name + ' have been up to today!',
+      attachments: _.map(data, function (element) {
+        return {
+          title: element.title,
+          fields: _.map(element.entries, function (value, key) {
+            return {
+              title: key,
+              value: value,
+              short: true
+            };
+          })
+        };
+      })
+    };
+  },
+  json: function json(data) {
+    return data;
+  }
 };
 
 var Organization = function () {
@@ -189,16 +102,21 @@ var Organization = function () {
   }, {
     key: 'sumItUp',
     value: function sumItUp() {
+      var _this = this;
+
+      var templateName = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 'json';
+
       var promises = [this._sumUpRepositories(), this._sumUpPullRequests(), this._sumUpIssues()];
 
       return Promise.all(promises).then(function (result) {
-        return _.merge.apply(_, _toConsumableArray(result));
+        result.org_name = _.capitalize(_this.name);
+        return templates[templateName](result);
       });
     }
   }, {
     key: '_sumUpRepositories',
     value: function _sumUpRepositories() {
-      var _this = this;
+      var _this2 = this;
 
       var promises = [];
       promises.push(this.getNewRepositories());
@@ -206,14 +124,17 @@ var Organization = function () {
       promises.push(this.getPushedRepositories());
 
       return Promise.all(promises).then(function (result) {
-        _this.repositories = _.merge.apply(_, _toConsumableArray(result));
-        return { repositories: _this.repositories };
+        _this2.repositories = _.merge.apply(_, _toConsumableArray(result));
+        return {
+          title: 'Repositories',
+          entries: _this2.repositories
+        };
       });
     }
   }, {
     key: '_sumUpPullRequests',
     value: function _sumUpPullRequests() {
-      var _this2 = this;
+      var _this3 = this;
 
       var promises = [];
       promises.push(this.getOpenPullRequests());
@@ -221,22 +142,28 @@ var Organization = function () {
       promises.push(this.getMergedPullRequests());
 
       return Promise.all(promises).then(function (result) {
-        _this2.pullRequests = _.merge.apply(_, _toConsumableArray(result));
-        return { pull_requests: _this2.pullRequests };
+        _this3.pullRequests = _.merge.apply(_, _toConsumableArray(result));
+        return {
+          title: 'Pull Requests',
+          entries: _this3.pullRequests
+        };
       });
     }
   }, {
     key: '_sumUpIssues',
     value: function _sumUpIssues() {
-      var _this3 = this;
+      var _this4 = this;
 
       var promises = [];
       promises.push(this.getOpenIssues());
       promises.push(this.getClosedIssues());
 
       return Promise.all(promises).then(function (result) {
-        _this3.issues = _.merge.apply(_, _toConsumableArray(result));
-        return { issues: _this3.issues };
+        _this4.issues = _.merge.apply(_, _toConsumableArray(result));
+        return {
+          title: 'Issues',
+          entries: _this4.issues
+        };
       });
     }
   }, {
@@ -249,7 +176,7 @@ var Organization = function () {
   }, {
     key: '_getResources',
     value: function _getResources(type, state) {
-      return githubClient.search.issues({ q: 'org:' + this.name + '+created:>' + this._morningTimeIso + '+type:' + type + '+is:' + state }).then(function (result) {
+      return this._client.search.issues({ q: 'org:' + this.name + '+created:>' + this._morningTimeIso + '+type:' + type + '+is:' + state }).then(function (result) {
         return _defineProperty({}, state, result.data.total_count);
       });
     }
@@ -259,6 +186,11 @@ var Organization = function () {
 }();
 
 module.exports = function (context, cb) {
+  // validate slack token in case of an incoming slash command
+  if (!_.isNil(context.body) && !_.isNil(context.body.token) && context.secrets.slack_token !== context.body.token) {
+    var err = new Error('Invalid slack token, are you sure this your webtask?' + ' Maybe you forgot to add the slack token to your secrets!');
+  }
+
   var githubConfig = {
     timeout: 5000,
     host: context.secrets.api_endpoint,
@@ -275,15 +207,23 @@ module.exports = function (context, cb) {
     token: context.secrets.api_token
   });
 
-  if (_.isNil(context.body.orgName) && _.isNil(context.data.orgName)) {
-    var err = new Error('Invalid or missing organization name');
-    cb(err);
+  // Extract organization name and decide rendering template
+  var orgName = void 0,
+      templateName = void 0;
+  if (!_.isNil(context.body) && !_.isNil(context.body.text)) {
+    orgName = context.body.text;
+    templateName = 'slack';
+  } else if (!_.isNil(context.data) && !_.isNil(context.data.orgName)) {
+    orgName = context.data.orgName;
+    templateName = 'json';
+  } else {
+    var _err = new Error('Invalid or missing organization name');
+    cb(_err);
   }
 
-  var orgName = !_.isNil(context.body.orgName) ? context.body.orgName : context.data.orgName;
-  var org = new Organization('facebook', githubClient);
+  var org = new Organization(orgName, githubClient);
 
-  return org.sumItUp().then(function (result) {
+  return org.sumItUp(templateName).then(function (result) {
     cb(null, result);
   }).catch(function (err) {
     console.log(err);
